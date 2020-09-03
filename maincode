@@ -1,0 +1,486 @@
+#include &lt;unistd.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+#include &lt;a.out.h&gt;
+#include &lt;time.h&gt;
+#include &lt;dirent.h&gt;
+#include &lt;fcntl.h&gt;
+
+char cwd[1024];
+int check;
+time_t rawtime;
+char c;
+
+FILE *fptr;
+
+FILE *source,*target;
+
+char ch;
+int i=0;
+static char history[4][25];
+static unsigned history_count = 0;
+char lsfile[20]=&quot;file &quot;;
+
+void addhistory(char **command )
+{
+strcpy(history[i],command[0]);
+i++;
+}
+
+int lsh_cddir(char **args);
+int lsh_help(char **args);
+int lsh_exit(char **args);
+int lsh_makedir(char **args);
+int lsh_sysdate(char **args);
+int lsh_deldir(char **args);
+int lsh_rname(char **args);
+int lsh_cwd(char **args);
+int lsh_list(char **args);
+int lsh_hist(char **args);
+int lsh_virstat(char **args);
+int lsh_calender(char **args);
+int lsh_dskmem(char **args);
+int lsh_interr(char **args);
+
+char *builtin_str[] = {
+&quot;cddir&quot;,
+&quot;help&quot;,
+&quot;exit&quot;,
+&quot;makedir&quot;,
+
+&quot;sysdate&quot;,
+&quot;deldir&quot;,
+&quot;rname&quot;,
+&quot;cwd&quot;,
+&quot;list&quot;,
+&quot;hist&quot;,
+&quot;virstat&quot;,
+&quot;calender&quot;,
+&quot;dskmem&quot;,
+&quot;interr&quot;,
+};
+
+int (*builtin_func[]) (char **) = {
+&amp;lsh_cddir,
+&amp;lsh_help,
+&amp;lsh_exit,
+&amp;lsh_makedir,
+&amp;lsh_sysdate,
+&amp;lsh_deldir,
+&amp;lsh_rname,
+&amp;lsh_cwd,
+&amp;lsh_list,
+&amp;lsh_hist,
+&amp;lsh_virstat,
+&amp;lsh_calender,
+&amp;lsh_dskmem,
+&amp;lsh_interr
+};
+
+int lsh_num_builtins()
+{
+return sizeof(builtin_str) / sizeof(char *);
+}
+
+int lsh_interr(char **args)
+{
+addhistory(args);
+system(&quot;cat /proc/interrupts&quot;);
+return 1;
+}
+
+int lsh_dskmem(char **args)
+{
+addhistory(args);
+if( args[1]==NULL)
+system(&quot;df&quot;);
+else
+printf(&quot;lsh:no argument required\n&quot;);
+return 1;
+}
+
+int lsh_virstat(char **args)
+{
+addhistory(args);
+if(args[1]==NULL)
+system(&quot;vmstat&quot;);
+else
+printf(&quot;lsh:No argument required\n&quot;);
+return 1;
+}
+
+int lsh_hist(char **args)
+{
+addhistory(args);
+int j=i-1,k=0,m;
+if(j&gt;4)
+{
+for(k=0;k&lt;4;k++)
+
+{
+m=i;
+printf(&quot;[%d]%s \n&quot;,k+1,history[k]);
+m++;
+}
+}
+else
+{
+while(k&lt;=j)
+{
+printf(&quot;[%d]%s \n&quot;,k+1,history[k]);
+k++;
+}
+}
+return 1;
+}
+
+int lsh_list(char **args)
+{
+addhistory( args );
+int i=0,j=1;
+struct dirent *de;
+DIR *dr = opendir(&quot;.&quot;);
+if(dr == NULL)
+{
+printf(&quot;Could not open current directory&quot; );
+return 0;
+}
+while((de = readdir(dr)) != NULL)
+{
+if (i&lt;4)
+{
+printf(&quot;[%d]%s\t &quot;, j++,de-&gt;d_name);
+i++;
+
+}
+else
+{
+i=0;
+printf(&quot;\n [%d]%s\t &quot;,j++,de-&gt;d_name);
+}
+}
+printf(&quot;\n&quot;);
+closedir(dr);
+return 1;
+}
+
+int lsh_cwd(char **args)
+{
+addhistory(args);
+if(getcwd(cwd,sizeof(cwd))!=NULL)
+printf(&quot;Current Working Directory: %s\n&quot;,cwd);
+else
+printf(&quot;error&quot;);
+return 1;
+}
+
+int lsh_rname(char **args)
+{
+addhistory(args);
+int i,fd1,fd2;
+char *file1,*file2,buf[2];
+file1=args[1];
+file2=args[2];
+printf(&quot;%s renamed to %s \n&quot;,file1,file2);
+fd1=open(file1,O_RDONLY,0777);
+fd2=creat(file2,0777);
+while(i=read(fd1,buf,1)&gt;0)
+write(fd2,buf,1);
+
+remove(file1);
+close(fd1);
+close(fd2);
+return 1;
+}
+
+int lsh_deldir(char **args)
+{
+addhistory(args);
+int check;
+char c;
+if(args[1]!=NULL)
+{
+printf(&quot;Really want to delete[Y/N]\n&quot;);
+c=getchar();
+if(c==&#39;Y&#39;||c==&#39;y&#39;)
+{
+check = rmdir(args[1]);
+if(!check)
+printf(&quot;Directory deleted : %s\n&quot;,args[1]);
+else
+{
+printf(&quot;Unable to remove directory Or directory does not exist\n&quot;);
+}
+}
+}
+else
+printf(&quot;Need an argument\n&quot;);
+return 1;
+}
+
+int lsh_makedir(char **args)
+{
+addhistory(args);
+
+if(args[1]==NULL)
+{
+printf(&quot;lsh:needs an argument\n&quot;);
+}
+else
+{
+check=mkdir(args[1]);
+if(!check)
+printf(&quot;Directory created\n&quot;);
+else
+printf (&quot;Error creating directory\n&quot;);
+}
+return 1;
+}
+
+int lsh_sysdate(char **args)
+{
+addhistory(args);
+if(args[1]==NULL)
+{
+struct tm * timeinfo;
+time ( &amp;rawtime );
+timeinfo = localtime ( &amp;rawtime );
+printf(&quot;Current local time and date: %s\n&quot;, asctime (timeinfo));
+}
+return 1;
+}
+
+int lsh_cddir(char **args)
+{
+addhistory(args);
+if(args[1] == NULL)
+{
+fprintf(stderr, &quot;lsh: expected argument to \&quot;cddir\&quot;\n&quot;);
+
+}
+else
+{
+if(chdir(args[1]) != 0)
+{
+perror(&quot;lsh&quot;);
+}
+else
+{
+if(getcwd(cwd, sizeof(cwd)) != NULL)
+fprintf(stdout, &quot;Current working dir: %s\n&quot;, cwd);
+else
+perror(&quot;getcwd() error&quot;);
+}
+}
+return 1;
+}
+
+int lsh_help(char **args)
+{
+addhistory(args);
+int i;
+if(args[1]==NULL)
+{
+printf(&quot;Use the help command for information on functions as :\n help --
+&lt;function_name&gt;\nfor the list of functions : use &#39;functions&#39; command\n&quot;);
+}
+else if(strcmp(args[1],&quot;--cddir&quot;)==0)
+{
+printf(&quot;cddir: changes the current working directory of the calling process to the
+directory specified in path.\n USAGE:- cddir &lt;PATH&gt;\n&quot;);
+}
+else if(strcmp(args[1], &quot;--wipe&quot;)==0)
+{
+
+printf(&quot;wipe: clear the terminal screen.\n USAGE:- wipe \n&quot; );
+}
+else if(strcmp(args[1],&quot;--makedir&quot;)==0)
+{
+printf(&quot;makedir: create the DIRECTORY(ies), if they do not already exist.\n USAGE:-
+makedir &lt;ARGUMENT&gt;\n&quot;);
+}
+else if (strcmp(args[1],&quot;--sysdate&quot;)==0)
+{
+printf(&quot;sysdate: print the system date and time\n USAGE: sysdate &lt;NO
+ARGUMENT&gt;\n&quot;);
+}
+else if (strcmp(args[1],&quot;--open&quot;)==0)
+{
+printf(&quot;open: print on the standard output.\nUSAGE: open &lt;FILENAME&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--copy&quot;)==0)
+{
+printf(&quot;copy: copy contents of one file to other. \nUSAGE: copy &lt;FILE1&gt;&lt;FILE2&gt;\n&quot;);
+}
+else if (strcmp(args[1],&quot;--delete&quot;)==0)
+{
+printf(&quot;delete: delete the file \nUSAGE: delete &lt;FILENAME&gt;\n&quot;);
+}
+else if (strcmp(args[1],&quot;--rname&quot;)==0)
+{
+printf(&quot;rname: rename the file \nUSAGE: rname &lt;FILENAME&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--cwd&quot;)==0)
+{
+printf(&quot;ced: prints the current working library\nUSAGE: cwd &lt;NO ARGUMENTS&gt;
+\n&quot;);
+}
+else if (strcmp(args[1],&quot;--list&quot;)==0)
+
+{
+printf(&quot;list: it shows the directory contents \nUSAGE: list &lt;NO ARGUMENTS&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--hist&quot;)==0)
+{
+printf(&quot;hist: prints the previous commands implemented in LSH\n hist&lt;NO
+ARGUMENTS&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--file&quot;)==0)
+{
+printf(&quot;file: prints the type of the file \nUSAGE: file &lt;FILENAME&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--vmstat&quot;)==0)
+{
+printf(&quot;vmstat: shows the virtua lmemory statistics \nUSAGE: vmstat /&lt;NO
+ARGUMENT&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--factor&quot;)==0)
+{
+printf(&quot;factor: shows the factor of a number\nUSAGE: factor &lt;NUMBER&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--cpu&quot;)==0)
+{
+printf(&quot;cpu: display information on CPU architecture\nUSAGE: cpu -a , cpu-i \n&quot;);
+}
+else if (strcmp(args[1],&quot;--cpuusage&quot;)==0)
+{
+printf(&quot;cpuusage: report processors related statistics\nUSAGE: cpuusage &lt;NO ARGS&gt;
+\n&quot;);
+}
+else if (strcmp(args[1],&quot;--statio&quot;)==0)
+{
+
+printf(&quot;statio: input/out‐put statistics for devices and partitions\nUSAGE:statio &lt;NO
+ARGS&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--meminfo&quot;)==0)
+{
+printf(&quot;meminfo: shows the RAM usage\nUSAGE: meminfo &lt;NO ARGUMENTS&gt;
+\n&quot;);
+}
+else if (strcmp(args[1],&quot;--process&quot;)==0)
+{
+printf(&quot;process: display User processes\nUSAGE: process &lt;NO ARGUMENTS&gt; \n&quot;);
+}
+else if (strcmp(args[1],&quot;--interr&quot;)==0)
+{
+printf(&quot;interr: number of interrupts per x86 Archietecture \n USAGE:interr &lt;NO
+ARGS&gt;\n&quot;);
+}
+else if (strcmp(args[1],&quot;--version&quot;)==0)
+{
+printf(&quot;version: shows the Linux version\nUSAGE: version \n&quot;);
+}
+else if (strcmp(args[1],&quot;--dskmem&quot;)==0)
+{
+printf(&quot;dskmem:Shows the disk space Usage\nUSAGE: dskmem \n&quot;);
+}
+else if (strcmp(args[1],&quot;--iptraf&quot;)==0)
+{
+printf(&quot;iptraf: IP LAN monitor \nUSAGE: iptraf &lt;NO ARGS&gt; \n&quot;);
+}
+return 1;
+}
+
+int lsh_exit(char **args)
+
+{
+addhistory(args);
+return 0;
+}
+
+int lsh_launch(char **args)
+{
+pid_t pid, wpid;
+int status;
+pid = fork();
+if(pid == 0)
+{
+if (execvp(args[0], args) == -1)
+{
+perror(&quot;lsh&quot;);
+}
+exit(EXIT_FAILURE);
+}else if (pid &lt; 0)
+{
+perror(&quot;lsh&quot;);
+}
+else
+{
+do
+{
+wpid = wait(pid, &amp;status, WUNTRACED);
+}while (!WIFEXITED(status) &amp;&amp; !WIFSIGNALED(status));
+}
+return 1;
+}
+
+int lsh_execute(char **args)
+{
+int i;
+
+if(args[0] == NULL)
+{
+return 1;
+}
+for (i = 0; i &lt; lsh_num_builtins(); i++)
+{
+if (strcmp(args[0], builtin_str[i]) == 0)
+{
+return (*builtin_func[i])(args);
+}
+}
+return lsh_launch(args);
+}
+
+#define LSH_RL_BUFSIZE 1024
+
+char *lsh_read_line(void)
+{
+int bufsize = LSH_RL_BUFSIZE;
+int position = 0;
+char *buffer = malloc(sizeof(char) * bufsize);
+int c;
+if (!buffer)
+{
+fprintf(stderr, &quot;lsh: allocation error\n&quot;);
+exit(EXIT_FAILURE);
+}
+
+while (1)
+{
+c = getchar();
+if (c == EOF || c == &#39;\n&#39;)
+{
+buffer[position] = &#39;\0&#39;;
+
+return buffer;
+}
+else
+{
+buffer[position] = c;
+}
+position++;
+if (position &gt;= bufsize)
+{
+bufsize += LSH_RL_BUFSIZE;
+buffer = realloc(buffer, bufsize);
+if (!buffer)
+{
+fprintf(stderr, &quot;lsh: allocation error\n&quot;);
+exit(EXIT_FAILURE);
+}
+}
+}
+}
